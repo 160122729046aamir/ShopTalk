@@ -3,16 +3,26 @@ import cors from 'cors';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
+// Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Together AI API configuration
-const TOGETHER_API_KEY = 'tgp_v1_gsSbf3vfeLq7uKpEFkf-WKYKP97PUgn-cl0l6DPuqpE'; // Replace with your Together AI API key
-const TOGETHER_API_URL = 'https://api.together.xyz/v1/chat/completions'; // Together AI API endpoint
+// OpenAI API Configuration
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // Ensure it's set in .env
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
-// ShopTalk data
+if (!OPENAI_API_KEY) {
+  console.error('❌ ERROR: OpenAI API key is missing. Set OPENAI_API_KEY in your .env file.');
+  process.exit(1);
+}
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// ShopTalk Information (Preloaded Data)
 const SHOPTALK_DATA = `
 1. What is ShopTalk App?
 ShopTalk is an extremely simplified version of workplace collaboration tool, particularly targeted towards MSMB business owners, leadership & teams. The objective is to build on established customer behaviour, like making calls, sending messages etc. ShopTalk accomplishes this by simply separating communication activity into 3 silos: personal, business, team.
@@ -71,46 +81,48 @@ ShopTalk currently works in India. We'll be expanding to other countries in comi
 Absolutely. ShopTalk is FREE to try all the features. Upon end of Trial period, there's still a version available to use for Free.
 `;
 
-app.use(cors());
-app.use(express.json());
-
-// POST endpoint to handle user input
+// API Endpoint to Handle User Queries
 app.post('/ask', async (req, res) => {
   const { prompt } = req.body;
 
+  if (!prompt) {
+    return res.status(400).json({ error: 'Prompt is required.' });
+  }
+
   try {
-    // Combine the ShopTalk data with the user's prompt
+    // Build the message history for OpenAI
     const messages = [
       {
         role: 'system',
-        content: `You are a helpful assistant that answers questions about ShopTalk App. Use the following information to answer questions: ${SHOPTALK_DATA}`,
+        content: `You are a helpful assistant that answers questions about ShopTalk App. Use the following information to answer questions accurately:\n\n${SHOPTALK_DATA}`,
       },
       { role: 'user', content: prompt },
     ];
 
+    // Call OpenAI API
     const response = await axios.post(
-      TOGETHER_API_URL,
+      OPENAI_API_URL,
       {
-        model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free', // Replace with the correct Together AI model
+        model: 'gpt-3.5-turbo', // Change to 'gpt-4' or 'gpt-4o' if available
         messages: messages,
       },
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${TOGETHER_API_KEY}`,
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
         },
       }
     );
 
-    // Send the response back to the client
+    // Send AI Response
     res.status(200).json({ answer: response.data.choices[0].message.content });
   } catch (error) {
-    console.error('Error fetching the answer:', error.response ? error.response.data : error.message);
-    res.status(500).json({ error: 'Failed to fetch the answer. Please try again.' });
+    console.error('❌ Error fetching response:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to fetch the answer. Please try again later.' });
   }
 });
 
-// Start the server
+// Start Server
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });
